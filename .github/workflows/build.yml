@@ -81,24 +81,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Install vcpkg
+    - name: Install FFmpeg
       run: |
-        git clone https://github.com/microsoft/vcpkg.git
-        cd vcpkg
-        .\bootstrap-vcpkg.bat
-    
-    - name: Install dependencies via vcpkg
-      run: |
-        cd vcpkg
-        .\vcpkg install ffmpeg:x64-windows
+        choco install ffmpeg-full -y
     
     - name: Configure
+      shell: bash
       run: |
         mkdir build
         cd build
-        cmake -DCMAKE_BUILD_TYPE=Release `
-              -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake `
-              -G "Visual Studio 17 2022" -A x64 ..
+        FFMPEG_DIR="C:/ProgramData/chocolatey/lib/ffmpeg-full/tools/ffmpeg-*/" \
+        cmake -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 17 2022" -A x64 ..
     
     - name: Build
       run: |
