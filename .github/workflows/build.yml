@@ -83,15 +83,24 @@ jobs:
     
     - name: Install FFmpeg
       run: |
-        choco install ffmpeg-full -y
+        choco install ffmpeg-full -y --force
+    
+    - name: Get FFmpeg path
+      id: ffmpeg
+      shell: pwsh
+      run: |
+        $path = Get-ChildItem "C:/ProgramData/chocolatey/lib/ffmpeg-full/tools/ffmpeg-*" | Select-Object -First 1 -ExpandProperty FullName
+        echo "ffmpeg_path=$path" >> $env:GITHUB_OUTPUT
     
     - name: Configure
       shell: bash
       run: |
         mkdir build
         cd build
-        FFMPEG_DIR="C:/ProgramData/chocolatey/lib/ffmpeg-full/tools/ffmpeg-*/" \
-        cmake -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 17 2022" -A x64 ..
+        cmake -G "Visual Studio 17 2022" -A x64 \
+          -DFFMPEG_INCLUDE_DIR="${{ steps.ffmpeg.outputs.ffmpeg_path }}/include" \
+          -DFFMPEG_LIBRARIES="${{ steps.ffmpeg.outputs.ffmpeg_path }}/lib/avformat.lib;${{ steps.ffmpeg.outputs.ffmpeg_path }}/lib/avcodec.lib;${{ steps.ffmpeg.outputs.ffmpeg_path }}/lib/avutil.lib" \
+          ..
     
     - name: Build
       run: |

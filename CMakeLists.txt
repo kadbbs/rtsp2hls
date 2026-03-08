@@ -6,24 +6,29 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # FFmpeg 依赖
 if(WIN32)
-  # Windows: 使用 find_package 查找 FFmpeg
-  find_package(FFmpeg COMPONENTS avformat avcodec avutil QUIET)
-  if(NOT FFmpeg_FOUND)
-    # 尝试从环境变量获取 FFmpeg 路径
-    if(DEFINED ENV{FFMPEG_DIR})
-      set(FFMPEG_DIR $ENV{FFMPEG_DIR})
-    endif()
-    
-    find_path(FFMPEG_INCLUDE_DIR NAMES libavformat/avformat.h)
-    find_library(FFMPEG_avformat_LIBRARY NAMES avformat)
-    find_library(FFMPEG_avcodec_LIBRARY NAMES avcodec)
-    find_library(FFMPEG_avutil_LIBRARY NAMES avutil)
-    
-    set(FFMPEG_INCLUDE_DIRS ${FFMPEG_INCLUDE_DIR})
-    set(FFMPEG_LIBRARIES ${FFMPEG_avformat_LIBRARY} ${FFMPEG_avcodec_LIBRARY} ${FFMPEG_avutil_LIBRARY})
+  # Windows: 使用 Chocolatey 安装的 FFmpeg
+  # Chocolatey 将 FFmpeg 安装在 C:/ProgramData/chocolatey/lib/ffmpeg-full/tools/ffmpeg-*/
+  file(GLOB FFMPEG_ROOT "C:/ProgramData/chocolatey/lib/ffmpeg-full/tools/ffmpeg-*")
+  if(FFMPEG_ROOT)
+    list(GET FFMPEG_ROOT 0 FFMPEG_ROOT)
+    set(FFMPEG_INCLUDE_DIR "${FFMPEG_ROOT}/include")
+    set(FFMPEG_LIBRARY_DIR "${FFMPEG_ROOT}/lib")
+    set(FFMPEG_LIBRARIES
+      "${FFMPEG_LIBRARY_DIR}/avformat.lib"
+      "${FFMPEG_LIBRARY_DIR}/avcodec.lib"
+      "${FFMPEG_LIBRARY_DIR}/avutil.lib"
+    )
   endif()
+elseif(APPLE)
+  # macOS: 使用 Homebrew
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(FFMPEG REQUIRED
+    libavformat
+    libavcodec
+    libavutil
+  )
 else()
-  # Linux/macOS: 使用 pkg-config
+  # Linux: 使用 pkg-config
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(FFMPEG REQUIRED
     libavformat
@@ -50,29 +55,46 @@ add_executable(media_server_v2
   src/webrtc_sender_stub.cpp
 )
 
-target_include_directories(media_server_v2 PRIVATE
-  ${FFMPEG_INCLUDE_DIRS}
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
+# Windows 特定配置
+if(WIN32)
+  target_include_directories(media_server_v2 PRIVATE
+    ${FFMPEG_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  target_link_libraries(media_server_v2 PRIVATE
+    ${FFMPEG_LIBRARIES}
+    ws2_32
+  )
+  target_compile_options(media_server_v2 PRIVATE /W4)
+else()
+  target_include_directories(media_server_v2 PRIVATE
+    ${FFMPEG_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  target_link_directories(media_server_v2 PRIVATE ${FFMPEG_LIBRARY_DIRS})
+  target_link_libraries(media_server_v2 PRIVATE
+    ${FFMPEG_LIBRARIES}
+  )
+  target_compile_options(media_server_v2 PRIVATE -Wall -Wextra)
+endif()
 
-target_link_directories(media_server_v2 PRIVATE ${FFMPEG_LIBRARY_DIRS})
-
-target_link_libraries(media_server_v2 PRIVATE
-  ${FFMPEG_LIBRARIES}
-)
-
-target_compile_options(media_server_v2 PRIVATE -Wall -Wextra)
-
-target_include_directories(stream_converter PRIVATE
-  ${FFMPEG_INCLUDE_DIRS}
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-target_link_directories(stream_converter PRIVATE ${FFMPEG_LIBRARY_DIRS})
-
-target_link_libraries(stream_converter PRIVATE
-  ${FFMPEG_LIBRARIES}
-)
-
-# 编译选项
-target_compile_options(stream_converter PRIVATE -Wall -Wextra)
+# stream_converter
+if(WIN32)
+  target_include_directories(stream_converter PRIVATE
+    ${FFMPEG_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  target_link_libraries(stream_converter PRIVATE
+    ${FFMPEG_LIBRARIES}
+    ws2_32
+  )
+else()
+  target_include_directories(stream_converter PRIVATE
+    ${FFMPEG_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  target_link_directories(stream_converter PRIVATE ${FFMPEG_LIBRARY_DIRS})
+  target_link_libraries(stream_converter PRIVATE
+    ${FFMPEG_LIBRARIES}
+  )
+endif()
