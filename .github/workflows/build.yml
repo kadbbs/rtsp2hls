@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build
 
 on:
   push:
@@ -42,13 +42,3 @@ jobs:
         path: |
           build/rtsp-hls-linux.tar.gz
           build/rtsp-hls-linux.tar.gz.sha256
-    
-    - name: Create release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          build/rtsp-hls-linux.tar.gz
-          build/rtsp-hls-linux.tar.gz.sha256
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
