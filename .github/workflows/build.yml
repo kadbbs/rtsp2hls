@@ -6,9 +6,8 @@ on:
       - 'v*'
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-22.04
-    
     steps:
     - uses: actions/checkout@v4
     
@@ -29,16 +28,86 @@ jobs:
         cd build
         make -j$(nproc)
     
-    - name: Create release archive
+    - name: Create archive
       run: |
         cd build
-        tar -czvf rtsp-hls-linux.tar.gz media_server_v2
-        sha256sum rtsp-hls-linux.tar.gz > rtsp-hls-linux.tar.gz.sha256
+        tar -czvf rtsp-hls-linux-x64.tar.gz media_server_v2
+        sha256sum rtsp-hls-linux-x64.tar.gz > rtsp-hls-linux-x64.tar.gz.sha256
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: rtsp-hls-linux
+        name: rtsp-hls-linux-x64
         path: |
-          build/rtsp-hls-linux.tar.gz
-          build/rtsp-hls-linux.tar.gz.sha256
+          build/rtsp-hls-linux-x64.tar.gz
+          build/rtsp-hls-linux-x64.tar.gz.sha256
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        brew install ffmpeg cmake
+    
+    - name: Configure
+      run: |
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Release ..
+    
+    - name: Build
+      run: |
+        cd build
+        make -j$(sysctl -n hw.ncpu)
+    
+    - name: Create archive
+      run: |
+        cd build
+        tar -czvf rtsp-hls-macos-x64.tar.gz media_server_v2
+        shasum -a 256 rtsp-hls-macos-x64.tar.gz > rtsp-hls-macos-x64.tar.gz.sha256
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: rtsp-hls-macos-x64
+        path: |
+          build/rtsp-hls-macos-x64.tar.gz
+          build/rtsp-hls-macos-x64.tar.gz.sha256
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        choco install ffmpeg-full cmake
+        refreshenv
+    
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 17 2022" -A x64 ..
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build . --config Release
+    
+    - name: Create archive
+      run: |
+        cd build
+        Compress-Archive -Path Release\media_server_v2.exe -DestinationPath rtsp-hls-windows-x64.zip
+        $hash = Get-FileHash rtsp-hls-windows-x64.zip -Algorithm SHA256
+        $hash.Hash + " rtsp-hls-windows-x64.zip" | Out-File -Encoding ASCII rtsp-hls-windows-x64.zip.sha256
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: rtsp-hls-windows-x64
+        path: |
+          build/rtsp-hls-windows-x64.zip
+          build/rtsp-hls-windows-x64.zip.sha256
