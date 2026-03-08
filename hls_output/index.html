@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RTSP/RTMP 转 HLS - 播放器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 2.5em;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    .player-section {
+      background: white;
+      border-radius: 15px;
+      padding: 30px;
+      margin-bottom: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    
+    .player-title {
+      font-size: 1.5em;
+      color: #333;
+      margin-bottom: 20px;
+      border-bottom: 3px solid #667eea;
+      padding-bottom: 10px;
+    }
+    
+    video {
+      width: 100%;
+      max-width: 900px;
+      border-radius: 10px;
+      background: #000;
+      display: block;
+      margin: 0 auto;
+    }
+    
+    .stream-list {
+      list-style: none;
+    }
+    
+    .stream-item {
+      background: #f8f9fa;
+      padding: 15px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-left: 4px solid #667eea;
+    }
+    
+    .stream-item:hover {
+      background: #e9ecef;
+      transform: translateX(5px);
+    }
+    
+    .stream-item.active {
+      background: #667eea;
+      color: white;
+    }
+    
+    .stream-path {
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+    
+    .stream-status {
+      font-size: 0.9em;
+      color: #666;
+      margin-top: 5px;
+    }
+    
+    .stream-item.active .stream-status {
+      color: #e0e0e0;
+    }
+    
+    .info-box {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+    
+    .info-box h3 {
+      color: #856404;
+      margin-bottom: 10px;
+    }
+    
+    .info-box code {
+      background: #f8f9fa;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: "Courier New", monospace;
+    }
+    
+    .refresh-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 8px;
+      font-size: 1.1em;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: block;
+      margin: 20px auto;
+    }
+    
+    .refresh-btn:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    .loading {
+      text-align: center;
+      color: white;
+      font-size: 1.2em;
+      padding: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📺 RTSP/RTMP 转 HLS 播放器</h1>
+    
+    <div class="player-section">
+      <h2 class="player-title">视频播放器</h2>
+      <video id="videoPlayer" controls autoplay>
+        您的浏览器不支持 HTML5 视频
+      </video>
+      <p style="text-align: center; margin-top: 15px; color: #666;">
+        点击下方的流名称开始播放
+      </p>
+    </div>
+    
+    <div class="player-section">
+      <h2 class="player-title">可用直播流</h2>
+      <ul class="stream-list" id="streamList">
+        <li class="loading">正在加载流列表...</li>
+      </ul>
+      <button class="refresh-btn" onclick="loadStreams()">🔄 刷新列表</button>
+    </div>
+    
+    <div class="info-box">
+      <h3>💡 使用说明</h3>
+      <p style="margin-bottom: 10px;"><strong>推流地址：</strong></p>
+      <p style="margin-bottom: 15px;">
+        <code>ffmpeg -re -i input.mp4 -c copy -f rtsp rtsp://服务器 IP:8554/live/mystream</code>
+      </p>
+      <p style="margin-bottom: 10px;"><strong>播放方式：</strong></p>
+      <ul style="margin-left: 20px;">
+        <li>点击上方的流名称自动播放</li>
+        <li>或直接在 VLC 中打开：<code>http://服务器 IP:8080/live/mystream/playlist.m3u8</code></li>
+      </ul>
+    </div>
+  </div>
+  
+  <script>
+    let currentStream = null;
+    
+    // 加载流列表
+    async function loadStreams() {
+      const streamList = document.getElementById('streamList');
+      streamList.innerHTML = '<li class="loading">正在加载...</li>';
+      
+      try {
+        // 这里应该调用 API 获取活跃流列表
+        // 暂时显示示例数据
+        const streams = [
+          { path: 'live/mystream', status: '直播中' },
+          { path: 'live/camera', status: '直播中' }
+        ];
+        
+        if (streams.length === 0) {
+          streamList.innerHTML = '<li class="loading">暂无活跃推流</li>';
+          return;
+        }
+        
+        streamList.innerHTML = '';
+        streams.forEach(stream => {
+          const li = document.createElement('li');
+          li.className = 'stream-item';
+          li.innerHTML = `
+            <div class="stream-path">📡 ${stream.path}</div>
+            <div class="stream-status">${stream.status}</div>
+          `;
+          li.onclick = () => playStream(stream.path);
+          streamList.appendChild(li);
+        });
+      } catch (error) {
+        streamList.innerHTML = '<li class="loading">加载失败</li>';
+        console.error('加载流列表失败:', error);
+      }
+    }
+    
+    // 播放指定流
+    function playStream(streamPath) {
+      const video = document.getElementById('videoPlayer');
+      const playlistUrl = `/${streamPath}/playlist.m3u8`;
+      
+      video.src = playlistUrl;
+      video.play();
+      
+      currentStream = streamPath;
+      
+      // 更新活动状态
+      document.querySelectorAll('.stream-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.textContent.includes(streamPath)) {
+          item.classList.add('active');
+        }
+      });
+      
+      console.log('正在播放:', streamPath);
+    }
+    
+    // 页面加载时获取流列表
+    loadStreams();
+    
+    // 每 30 秒自动刷新
+    setInterval(loadStreams, 30000);
+  </script>
+</body>
+</html>
