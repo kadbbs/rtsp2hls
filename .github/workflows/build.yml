@@ -1,0 +1,54 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++ pkg-config \
+          libavformat-dev libavcodec-dev libavutil-dev
+    
+    - name: Configure
+      run: |
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Release ..
+    
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc)
+    
+    - name: Create release archive
+      run: |
+        cd build
+        tar -czvf rtsp-hls-linux.tar.gz media_server_v2
+        sha256sum rtsp-hls-linux.tar.gz > rtsp-hls-linux.tar.gz.sha256
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: rtsp-hls-linux
+        path: |
+          build/rtsp-hls-linux.tar.gz
+          build/rtsp-hls-linux.tar.gz.sha256
+    
+    - name: Create release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          build/rtsp-hls-linux.tar.gz
+          build/rtsp-hls-linux.tar.gz.sha256
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
