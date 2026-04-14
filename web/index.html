@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>avtrans demo</title>
+    <style>
+      :root {
+        --bg: #0d1b1e;
+        --panel: #14323a;
+        --text: #e9fff8;
+        --muted: #9fc7be;
+        --accent: #f3b43f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+        background:
+          radial-gradient(circle at top right, rgba(243, 180, 63, 0.18), transparent 24%),
+          linear-gradient(135deg, #081214, var(--bg));
+        color: var(--text);
+        display: grid;
+        place-items: center;
+      }
+      .card {
+        width: min(920px, calc(100vw - 32px));
+        background: rgba(20, 50, 58, 0.9);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 24px;
+        padding: 24px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      }
+      h1 { margin-top: 0; }
+      p, li { color: var(--muted); line-height: 1.6; }
+      textarea {
+        width: 100%;
+        min-height: 180px;
+        resize: vertical;
+        background: #09171a;
+        color: var(--text);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 12px;
+        padding: 12px;
+      }
+      button {
+        margin-top: 12px;
+        background: var(--accent);
+        color: #1c1506;
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #09171a;
+        border-radius: 12px;
+        padding: 12px;
+      }
+      video {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background: #061114;
+        border-radius: 18px;
+        border: 1px solid rgba(255,255,255,0.08);
+        margin: 16px 0;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>RTSP/RTMP -> WebRTC 示例页</h1>
+      <p>这个页面现在会真正创建浏览器端 `PeerConnection`，提交 offer 给后端，并把后端返回的 answer 应用回本地连接。只要后端已经拉到 RTSP 流，页面就有机会直接出画面。</p>
+      <ol>
+        <li>浏览器创建 offer</li>
+        <li>POST 到服务端 `/offer`</li>
+        <li>服务端返回 answer</li>
+        <li>浏览器设置远端描述并接收视频轨</li>
+      </ol>
+      <video id="video" autoplay playsinline controls muted></video>
+      <div class="row">
+        <button id="start">开始播放</button>
+        <button id="stop">断开连接</button>
+      </div>
+      <textarea id="offer" placeholder="这里会显示浏览器生成的 SDP offer"></textarea>
+      <textarea id="answer" placeholder="这里会显示服务端返回的 SDP answer"></textarea>
+      <pre id="resp">等待操作...</pre>
+    </main>
+    <script>
+      const offerEl = document.getElementById("offer");
+      const answerEl = document.getElementById("answer");
+      const respEl = document.getElementById("resp");
+      const videoEl = document.getElementById("video");
+      let pc = null;
+      let remoteStream = null;
+
+      async function waitForIceComplete(conn) {
+        if (conn.iceGatheringState === "complete") {
+          return;
+        }
+        await new Promise((resolve) => {
+          const onState = () => {
+            if (conn.iceGatheringState === "complete") {
+              conn.removeEventListener("icegatheringstatechange", onState);
+              resolve();
+            }
+          };
+          conn.addEventListener("icegatheringstatechange", onState);
+          setTimeout(() => {
+            conn.removeEventListener("icegatheringstatechange", onState);
+            resolve();
+          }, 8000);
+        });
+      }
+
+      async function ensurePc() {
+        if (pc) {
+          return pc;
+        }
+        pc = new RTCPeerConnection();
+        pc.addTransceiver("video", { direction: "recvonly" });
+        pc.addTransceiver("audio", { direction: "recvonly" });
+        remoteStream = new MediaStream();
+        videoEl.srcObject = remoteStream;
+        pc.ontrack = (event) => {
+          for (const track of event.streams[0]?.getTracks?.() || []) {
+            remoteStream.addTrack(track);
+          }
+          if (!event.streams.length) {
+            remoteStream.addTrack(event.track);
+          }
+          respEl.textContent = "已收到远端轨道，等待浏览器开始播放。";
+        };
+        pc.onconnectionstatechange = () => {
+          respEl.textContent =
+            "PeerConnection 状态: " + pc.connectionState;
+        };
+        return pc;
+      }
+
+      document.getElementById("start").onclick = async () => {
+        const conn = await ensurePc();
+        const offer = await pc.createOffer();
+        await conn.setLocalDescription(offer);
+        respEl.textContent = "本地 Offer 已生成，等待浏览器 ICE 收集完成...";
+        await waitForIceComplete(conn);
+        offerEl.value = conn.localDescription.sdp;
+        respEl.textContent = "Offer 已生成，正在请求服务端 answer...";
+        const res = await fetch("/offer", {
+          method: "POST",
+          headers: { "Content-Type": "application/sdp" },
+          body: offerEl.value
+        });
+        const answerSdp = await res.text();
+        answerEl.value = answerSdp;
+        if (!res.ok) {
+          respEl.textContent = "服务端返回错误:\n" + answerSdp;
+          return;
+        }
+        await conn.setRemoteDescription({
+          type: "answer",
+          sdp: answerSdp
+        });
+        respEl.textContent = "Answer 已应用，等待 ICE 建连和视频轨道...";
+      };
+
+      document.getElementById("stop").onclick = async () => {
+        if (pc) {
+          pc.close();
+          pc = null;
+        }
+        if (remoteStream) {
+          for (const track of remoteStream.getTracks()) {
+            track.stop();
+          }
+        }
+        remoteStream = null;
+        videoEl.srcObject = null;
+        offerEl.value = "";
+        answerEl.value = "";
+        respEl.textContent = "连接已断开。";
+      };
+    </script>
+  </body>
+</html>
